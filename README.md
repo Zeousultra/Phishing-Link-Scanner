@@ -107,7 +107,7 @@ Scanning: http://bit.ly/2z3Fz9n
 ## 📁 File Structure
 
 ```
-phish-scan/
+Phishing-Link-Scanner/
 ├── phishscan.py
 ├── requirements.txt
 └── README.md
