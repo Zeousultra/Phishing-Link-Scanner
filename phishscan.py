@@ -1,78 +1,83 @@
-import argparse
 import re
+import argparse
 import requests
 from urllib.parse import urlparse
+from colorama import init, Fore, Style
 
-PHISHING_KEYWORDS = ["login", "verify", "account", "update", "secure", "banking", "password", "signin"]
-SHORTENERS = ["bit.ly", "t.co", "goo.gl", "tinyurl.com", "is.gd", "buff.ly", "adf.ly", "ow.ly"]
+# Initialize colorama
+init(autoreset=True)
 
-def is_ip_address(url):
-    return bool(re.match(r"https?://\d{1,3}(?:\.\d{1,3}){3}", url))
+# Define phishing-related keywords
+phishing_keywords = [
+    "login", "verify", "account", "secure", "bank", "update", "free", "gift"
+]
 
-def contains_phishing_keywords(url):
-    found = [kw for kw in PHISHING_KEYWORDS if kw.lower() in url.lower()]
+# Known URL shorteners
+url_shorteners = [
+    "bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "buff.ly", "adf.ly"
+]
+
+def is_shortened(url):
+    domain = urlparse(url).netloc
+    return any(short in domain for short in url_shorteners)
+
+def contains_keywords(url):
+    found = [kw for kw in phishing_keywords if kw in url.lower()]
     return found
 
-def uses_shortener(netloc):
-    return any(shortener in netloc for shortener in SHORTENERS)
+def is_suspicious_structure(url):
+    domain = urlparse(url).netloc
+    return domain.count(".") > 3
 
-def follow_redirects(url):
+def resolve_redirects(url):
     try:
-        response = requests.head(url, allow_redirects=True, timeout=5)
-        return response.url if response.url != url else None
+        response = requests.get(url, timeout=5)
+        return response.url
     except requests.RequestException:
         return None
 
-def scan_url(url):
-    parsed = urlparse(url)
-    flags = []
-    verdict_issues = []
+def analyze_url(url):
+    print(Fore.CYAN + "\n────────────────────────────")
+    print(Fore.YELLOW + f"Scanning: {url}\n")
 
-    print("\n🔍 PHISHING LINK SCANNER\n" + "─" * 28)
-    print(f"Scanning: {url}\n")
-
-    # IP address check
-    if is_ip_address(url):
-        print("  ❌ Uses IP address instead of domain")
-        verdict_issues.append("ip")
+    domain = urlparse(url).netloc
+    if domain:
+        print(Fore.GREEN + "  ✅ Uses domain name")
     else:
-        print("  ✅ Uses domain name")
+        print(Fore.RED + "  ❌ No domain detected")
 
-    # Phishing keywords
-    keywords = contains_phishing_keywords(url)
+    keywords = contains_keywords(url)
     if keywords:
-        print(f"  ❌ Contains phishing keywords: {', '.join(keywords)}")
-        verdict_issues.append("keywords")
+        print(Fore.RED + f"  ❌ Contains phishing keywords: {', '.join(keywords)}")
     else:
-        print("  ✅ No phishing keywords found")
+        print(Fore.GREEN + "  ✅ No phishing keywords detected")
 
-    # Shortened URL check
-    if uses_shortener(parsed.netloc):
-        print(f"  ❌ Uses URL shortener: {parsed.netloc}")
-        verdict_issues.append("shortener")
+    if is_shortened(url):
+        print(Fore.RED + "  ❌ Known URL shortener used")
     else:
-        print("  ✅ Not a known URL shortener")
+        print(Fore.GREEN + "  ✅ Not a known URL shortener")
 
-    # Redirect check
-    redirect = follow_redirects(url)
-    if redirect:
-        print(f"  ➡ Redirects to: {redirect}")
-        if uses_shortener(urlparse(redirect).netloc):
-            verdict_issues.append("redirect_shortener")
-    else:
-        print("  ✅ No redirect detected")
+    if is_suspicious_structure(url):
+        print(Fore.RED + "  ⚠ Suspicious domain structure")
 
-    print("\n🧠 Final Verdict:")
-    if verdict_issues:
-        print(" ⚠ Suspicious — Might be phishing.")
+    redirect_url = resolve_redirects(url)
+    if redirect_url and redirect_url != url:
+        print(Fore.BLUE + f"  ➡ Redirects to: {redirect_url}")
+    elif redirect_url:
+        print(Fore.GREEN + "  ✅ No redirection detected")
     else:
-        print(" ✅ Likely safe.")
+        print(Fore.RED + "  ❌ Failed to resolve URL")
+
+    if keywords or is_shortened(url) or is_suspicious_structure(url):
+        print(Fore.RED + Style.BRIGHT + "\n⚠ This URL may be a PHISHING ATTEMPT.\n")
+    else:
+        print(Fore.GREEN + Style.BRIGHT + "\n✅ This URL appears to be safe.\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Simple phishing link scanner")
-    parser.add_argument("-u", "--url", help="URL to scan", required=True)
+    parser = argparse.ArgumentParser(description="Phishing Link Scanner")
+    parser.add_argument("-u", "--url", required=True, help="URL to scan")
     args = parser.parse_args()
-    scan_url(args.url)
+    analyze_url(args.url)
 
 if __name__ == "__main__":
     main()
